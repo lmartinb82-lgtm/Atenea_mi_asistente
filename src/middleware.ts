@@ -34,7 +34,13 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user && request.nextUrl.pathname === '/') {
+  if (!user && (request.nextUrl.pathname === '/' || request.nextUrl.pathname.startsWith('/api'))) {
+    if (request.nextUrl.pathname.startsWith('/api')) {
+      return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -46,5 +52,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };

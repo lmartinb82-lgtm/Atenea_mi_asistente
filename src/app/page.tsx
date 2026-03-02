@@ -7,10 +7,11 @@ import VisionPanel from "@/components/vision/VisionPanel";
 import { generatePDF, generateExcel } from "@/lib/reports";
 import { Message, Project } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Send, Paperclip, Camera, Terminal, BrainCircuit, Loader2, FileSpreadsheet, FileText } from "lucide-react";
+import { Mic, MicOff, Send, Paperclip, Camera, Loader2, FileSpreadsheet, FileText } from "lucide-react";
+import Image from "next/image";
 
 export default function Home() {
-  const [projects, setProjects] = useState<Project[]>([{ id: "1", name: "Campaña 2026" }, { id: "2", name: "Análisis Técnico" }]);
+  const [projects] = useState<Project[]>([{ id: "1", name: "Campaña 2026" }, { id: "2", name: "Análisis Técnico" }]);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>("1");
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -32,8 +33,19 @@ export default function Home() {
     scrollToBottom();
   }, [messages]);
 
-  const speakText = async (text: string) => {
-    if (!text) return;
+  const audioQueue = useRef<string[]>([]);
+  const isAudioPlaying = useRef(false);
+
+  const processAudioQueue = async () => {
+    if (isAudioPlaying.current || audioQueue.current.length === 0) return;
+
+    isAudioPlaying.current = true;
+    const text = audioQueue.current.shift();
+    if (!text) {
+      isAudioPlaying.current = false;
+      return;
+    }
+
     setIsSpeaking(true);
     try {
       const response = await fetch('/api/voice', {
@@ -45,13 +57,25 @@ export default function Home() {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
-      audio.onended = () => setIsSpeaking(false);
       audioRef.current = audio;
+      audio.onended = () => {
+        setIsSpeaking(false);
+        isAudioPlaying.current = false;
+        processAudioQueue();
+      };
       audio.play();
     } catch (err) {
       console.error("Voice Error:", err);
       setIsSpeaking(false);
+      isAudioPlaying.current = false;
+      processAudioQueue();
     }
+  };
+
+  const speakText = async (text: string) => {
+    if (!text || text.trim().length === 0) return;
+    audioQueue.current.push(text);
+    processAudioQueue();
   };
 
   const handleSendMessage = async (content?: string, image?: string, fileData?: string) => {
@@ -77,23 +101,40 @@ export default function Home() {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let assistantMessage: Message = { role: "assistant", content: "" };
+      const assistantMessage: Message = { role: "assistant", content: "" };
       setMessages(prev => [...prev, assistantMessage]);
 
-      while (true) {
-        const { done, value } = await reader!.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n').filter(Boolean);
-        for (const line of lines) {
-           const data = JSON.parse(line);
-           if (data.type === 'text') {
-             assistantMessage.content += data.text;
-             setMessages(prev => [...prev.slice(0, -1), { ...assistantMessage }]);
-           }
+      let accumulatedText = "";
+      let lastSpokenIndex = 0;
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n').filter(Boolean);
+          for (const line of lines) {
+             const data = JSON.parse(line);
+             if (data.type === 'text') {
+               assistantMessage.content += data.text;
+               accumulatedText += data.text;
+               setMessages(prev => [...prev.slice(0, -1), { ...assistantMessage }]);
+
+               // Speak in chunks of full sentences for lower latency
+               if (accumulatedText.length - lastSpokenIndex > 100 && /[.!?]\s$/.test(accumulatedText)) {
+                  const chunkToSpeak = accumulatedText.substring(lastSpokenIndex);
+                  speakText(chunkToSpeak);
+                  lastSpokenIndex = accumulatedText.length;
+               }
+             }
+          }
         }
       }
-      await speakText(assistantMessage.content);
+
+      // Speak final chunk if any
+      if (lastSpokenIndex < accumulatedText.length) {
+         await speakText(accumulatedText.substring(lastSpokenIndex));
+      }
     } catch (error) {
       console.error("Chat Error:", error);
       setMessages(prev => [...prev, { role: "assistant", content: "Error procesando solicitud." }]);
@@ -106,23 +147,25 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type.startsWith('image/')) {
-       const reader = new FileReader();
-       reader.onload = (e) => handleSendMessage("Analiza esta imagen:", e.target?.result as string);
-       reader.readAsDataURL(file);
-    } else {
-       // For Excel/PDF we'd normally use a library here, but for now we'll send it as base64 or inform
-       handleSendMessage(`He subido el archivo: ${file.name}. Por favor, ayúdame a procesarlo.`);
-    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (file.type.startsWith('image/')) {
+        handleSendMessage("Analiza esta imagen:", result);
+      } else {
+        handleSendMessage(`Analiza el archivo: ${file.name}`, undefined, result);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const startVoiceCapture = () => {
-     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+     const SpeechRecognition = (window as Window & { SpeechRecognition?: any; webkitSpeechRecognition?: any }).SpeechRecognition || (window as Window & { SpeechRecognition?: any; webkitSpeechRecognition?: any }).webkitSpeechRecognition;
      if (!SpeechRecognition) return;
      const recognition = new SpeechRecognition();
      recognition.lang = 'es-ES';
      recognition.onstart = () => setIsListening(true);
-     recognition.onresult = (event: any) => handleSendMessage(event.results[0][0].transcript);
+     recognition.onresult = (event: { results: { [key: number]: { [key: number]: { transcript: string } } } }) => handleSendMessage(event.results[0][0].transcript);
      recognition.onend = () => setIsListening(false);
      recognition.start();
   };
@@ -157,7 +200,7 @@ export default function Home() {
                   {messages.map((m, i) => (
                     <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm ${m.role === 'user' ? 'bg-indigo-atenea text-white shadow-lg' : 'bg-indigo-atenea-dark/30 text-indigo-100 border border-indigo-atenea/20'}`}>
-                        {m.image && <img src={m.image} className="w-full h-auto rounded-lg mb-3" />}
+                        {m.image && <div className="relative w-full h-48 mb-3"><Image src={m.image} alt="Imagen adjunta" fill className="object-cover rounded-lg" /></div>}
                         <div className="whitespace-pre-wrap">{m.content}</div>
                       </div>
                     </motion.div>
