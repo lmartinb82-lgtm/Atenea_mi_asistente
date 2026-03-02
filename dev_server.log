@@ -1,0 +1,26 @@
+
+> atenea-temp@0.1.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use by an unknown process, using available port 3003 instead.
+   ▲ Next.js 15.5.12
+   - Local:        http://localhost:3003
+   - Network:      http://192.168.0.2:3003
+
+ ✓ Starting...
+ ✓ Ready in 3s
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 1671ms (164 modules)
+ ○ Compiling /login ...
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (133kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+
+
+Retrying 1/3...
+
+
+Retrying 1/3...
+
+
+Retrying 1/3...
+ ✓ Compiled /login in 8s (1484 modules)
+ GET /login 200 in 9185ms

@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 const apiKey = process.env.GEMINI_API_KEY || 'placeholder';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const genAI = new GoogleGenerativeAI(apiKey);
 
 export const tools = [

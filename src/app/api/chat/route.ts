@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
     const history = [...dbHistory, ...recentHistory];
 
-    const currentParts: any[] = [{ text: lastUserMessage.content }];
+    const currentParts: any[] = [{ text: lastUserMessage.content || "Análisis de archivo" }];
 
     if (image) {
       const base64Data = image.split(',')[1];
@@ -94,7 +94,8 @@ export async function POST(req: Request) {
                   const response = await fetch(`https://www.googleapis.com/customsearch/v1?key=${process.env.GOOGLE_SEARCH_API_KEY}&cx=${process.env.GOOGLE_SEARCH_CX}&q=${encodeURIComponent((call.args as any).query)}`);
                   const data = await response.json();
                   toolResult = { results: data.items?.map((i: any) => `${i.title}: ${i.snippet}`).join('\n') || 'No se encontraron resultados' };
-                } catch (e) {
+                } catch (err) {
+                  console.error("Google Search Error:", err);
                   toolResult = { error: 'Error en búsqueda web' };
                 }
               }

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Camera, X, Check } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Camera, X } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface VisionPanelProps {
   onCapture: (image: string) => void;
