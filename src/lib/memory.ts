@@ -5,6 +5,38 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
 
 export const supabaseServer = createClient(supabaseUrl, supabaseKey);
 
+// Guest ID for public access
+export const PUBLIC_USER_ID = '00000000-0000-0000-0000-000000000000';
+
+export async function getProjects() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
+  const { data, error } = await supabaseServer
+    .from('projects')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error getting projects:', error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function createProject(name: string) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return null;
+  const { data, error } = await supabaseServer
+    .from('projects')
+    .insert([{ name, user_id: null }]) // Using null for public shared projects
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating project:', error);
+    return null;
+  }
+  return data;
+}
+
 export async function saveMessage(projectId: string, role: string, content: string, type: string = 'text') {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return null;
   const { data, error } = await supabaseServer
