@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { systemInstruction, tools } from '@/services/gemini';
 import { saveMessage, getProjectHistory } from '@/lib/memory';
+import { executePythonCode } from '@/services/codeExecution';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'placeholder');
 
@@ -82,13 +83,13 @@ export async function POST(req: Request) {
 
               let toolResult;
               if (call.name === 'execute_python') {
-                const response = await fetch(`${req.url.replace('/api/chat', '/api/code')}`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ code: (call.args as any).code }),
-                });
-                const data = await response.json();
-                toolResult = { output: data.logs || data.results?.join('\n') || 'Ejecución completada' };
+                try {
+                  const data = await executePythonCode((call.args as any).code);
+                  toolResult = { output: data.logs || data.results?.join('\n') || 'Ejecución completada' };
+                } catch (err: any) {
+                  console.error("Python Execution Error:", err);
+                  toolResult = { error: err.message || 'Error ejecutando código' };
+                }
               } else if (call.name === 'google_search') {
                 try {
                   const response = await fetch(`https://www.googleapis.com/customsearch/v1?key=${process.env.GOOGLE_SEARCH_API_KEY}&cx=${process.env.GOOGLE_SEARCH_CX}&q=${encodeURIComponent((call.args as any).query)}`);
