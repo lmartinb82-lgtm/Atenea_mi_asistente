@@ -9,7 +9,7 @@ export const tools = [
     functionDeclarations: [
       {
         name: "execute_python",
-        description: "Ejecuta código Python en un entorno seguro (E2B) para realizar cálculos matemáticos exactos, procesar archivos (Excel/PDF) o realizar ingeniería inversa de datos.",
+        description: "Ejecuta código Python en un entorno seguro (E2B) para realizar cálculos matemáticos exactos o procesar archivos complejos.",
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
@@ -23,7 +23,7 @@ export const tools = [
       },
       {
         name: "google_search",
-        description: "Busca información en tiempo real en internet para investigar normativas, Amazon, Google u otras fuentes verificadas.",
+        description: "Busca información en tiempo real en internet para investigar normativas, productos o datos actualizados.",
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
@@ -34,6 +34,25 @@ export const tools = [
           },
           required: ["query"]
         }
+      },
+      {
+        name: "generate_report",
+        description: "Genera automáticamente un reporte profesional en PDF o Excel para el usuario.",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            type: {
+              type: SchemaType.STRING,
+              enum: ["pdf", "excel"],
+              description: "El formato del reporte."
+            },
+            data: {
+              type: SchemaType.STRING,
+              description: "El contenido o datos estructurados para el reporte."
+            }
+          },
+          required: ["type", "data"]
+        }
       }
     ]
   }
@@ -43,22 +62,17 @@ export const systemInstruction = `
 Eres ATENEA, un agente web multimodal de vanguardia basado en Gemini 2.0 Flash.
 
 TU MISIÓN:
-Eres el núcleo de inteligencia de un portal avanzado ("Neural Intelligence Portal"). Debes asistir al usuario con precisión técnica, visión computacional y ejecución de código autónoma.
+Eres el núcleo de inteligencia de un portal avanzado. Debes asistir al usuario con precisión técnica, visión computacional y ejecución de código autónoma.
 
 REGLAS DE ORO:
-1. IDENTIDAD: Eres ATENEA. Tu tono es profesional, futurista y altamente eficiente.
-2. VOZ: SIEMPRE respondes pensando en que tu texto será leído en voz alta. Sé concisa pero informativa.
-3. VISIÓN: Puedes "ver" y analizar imágenes de todo tipo (fotos, capturas de pantalla). Eres experta en interpretar planillas manuscritas, protocolos NIR y documentos técnicos.
-4. RAZONAMIENTO (Chain of Thought): Antes de dar una respuesta compleja, "piensa" en los pasos necesarios. No adivines datos numéricos; usa Python para cálculos exactos.
-5. HERRAMIENTAS:
-   - Usa 'execute_python' para: procesar Excel/PDF, análisis de datos, ingeniería inversa o cualquier cálculo.
-   - Usa 'google_search' para: navegar por internet, buscar normativas o información actualizada.
-6. ENTREGABLES: Puedes generar reportes. Si el usuario pide un PDF o Excel, usa Python para generarlos o indica que estás lista para que el sistema los exporte (el sistema tiene funciones nativas para esto).
-7. INTERRUPCIÓN: Aceptas que el usuario te interrumpa; si lo hace, detén tu flujo y escucha la nueva instrucción.
+1. IDENTIDAD: Eres ATENEA. Tu tono es profesional, proactivo y futurista.
+2. VOZ: Responde de forma que tu texto sea agradable al ser sintetizado por voz. Evita listas excesivamente largas a menos que se te pida.
+3. VISIÓN: Puedes analizar imágenes de webcam y archivos. Eres experta en planillas manuscritas y protocolos NIR.
+4. HERRAMIENTAS:
+   - Usa 'execute_python' para lógica de datos compleja.
+   - Usa 'google_search' para información externa.
+   - Usa 'generate_report' cuando el usuario pida un PDF o Excel con los resultados del análisis.
+5. MEMORIA: Recuerda que este es un portal compartido. Mantén el orden en los proyectos.
 
-REPLICACIÓN LÓGICA:
-Tu lógica de razonamiento debe ser robusta, similar a un "AteneaEngine" que gestiona el flujo de conversación y mantiene la memoria persistente de la sesión compartida.
-
-ESTILO VISUAL:
-Te comunicas en un entorno de estilo oscuro y futurista. Tus respuestas deben reflejar esa estética de "inteligencia neural".
+Si el usuario te interrumpe, detén tu respuesta actual y atiende la nueva solicitud.
 `;

@@ -11,11 +11,11 @@ export async function POST(req: Request) {
     const { messages, projectId, image, fileData } = await req.json();
 
     if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: 'Gemini API Key not configured' }, { status: 500 });
+      return NextResponse.json({ error: 'Falta GEMINI_API_KEY' }, { status: 500 });
     }
 
     const lastUserMessage = messages[messages.length - 1];
-    if (projectId) {
+    if (projectId && lastUserMessage.content) {
       await saveMessage(projectId, 'user', lastUserMessage.content, (image || fileData) ? 'file' : 'text');
     }
 
@@ -25,7 +25,6 @@ export async function POST(req: Request) {
       tools: tools as any,
     });
 
-    // Merge recent messages with historical project data
     let dbHistory: any[] = [];
     if (projectId) {
       const records = await getProjectHistory(projectId);
@@ -41,27 +40,21 @@ export async function POST(req: Request) {
     }));
 
     const history = [...dbHistory, ...recentHistory];
-
-    const currentParts: any[] = [{ text: lastUserMessage.content || "Análisis de archivo" }];
+    const currentParts: any[] = [{ text: lastUserMessage.content || "Analiza el archivo adjunto" }];
 
     if (image) {
       const base64Data = image.split(',')[1];
       const mimeType = image.split(',')[0].split(':')[1].split(';')[0];
-      currentParts.push({
-        inlineData: { data: base64Data, mimeType: mimeType },
-      });
+      currentParts.push({ inlineData: { data: base64Data, mimeType } });
     }
 
     if (fileData) {
       const base64Data = fileData.split(',')[1];
       const mimeType = fileData.split(',')[0].split(':')[1].split(';')[0];
-
       if (mimeType === 'application/pdf' || mimeType.includes('spreadsheet') || mimeType.includes('excel')) {
-        currentParts.push({
-          inlineData: { data: base64Data, mimeType: mimeType },
-        });
+        currentParts.push({ inlineData: { data: base64Data, mimeType } });
       } else {
-        currentParts.push({ text: `[Archivo Adjunto]: ${fileData}` });
+        currentParts.push({ text: `[Archivo]: ${fileData.substring(0, 1000)}...` });
       }
     }
 
@@ -69,44 +62,40 @@ export async function POST(req: Request) {
     const result = await chat.sendMessageStream(currentParts);
 
     const encoder = new TextEncoder();
-
     const stream = new ReadableStream({
       async start(controller) {
         let fullResponseText = "";
 
         for await (const chunk of result.stream) {
-          // Check for function calls
           const calls = chunk.functionCalls();
           if (calls && calls.length > 0) {
             for (const call of calls) {
-              controller.enqueue(encoder.encode(JSON.stringify({ type: 'status', message: `Ejecutando ${call.name}...` }) + "\n"));
+              controller.enqueue(encoder.encode(JSON.stringify({ type: 'status', message: `Atenea activando: ${call.name}` }) + "\n"));
 
               let toolResult;
               if (call.name === 'execute_python') {
                 try {
                   const data = await executePythonCode((call.args as any).code);
-                  toolResult = { output: data.logs || data.results?.join('\n') || 'Ejecución completada' };
+                  toolResult = { output: data.logs || data.results?.join('\n') || 'Ejecutado' };
                 } catch (err: any) {
-                  console.error("Python Execution Error:", err);
-                  toolResult = { error: err.message || 'Error ejecutando código' };
+                  toolResult = { error: err.message };
                 }
               } else if (call.name === 'google_search') {
                 try {
                   const response = await fetch(`https://www.googleapis.com/customsearch/v1?key=${process.env.GOOGLE_SEARCH_API_KEY}&cx=${process.env.GOOGLE_SEARCH_CX}&q=${encodeURIComponent((call.args as any).query)}`);
                   const data = await response.json();
-                  toolResult = { results: data.items?.map((i: any) => `${i.title}: ${i.snippet}`).join('\n') || 'No se encontraron resultados' };
+                  toolResult = { results: data.items?.map((i: any) => i.snippet).join('\n') || 'Sin resultados' };
                 } catch (err) {
-                  console.error("Google Search Error:", err);
-                  toolResult = { error: 'Error en búsqueda web' };
+                  toolResult = { error: 'Error en búsqueda' };
                 }
+              } else if (call.name === 'generate_report') {
+                const args = call.args as any;
+                controller.enqueue(encoder.encode(JSON.stringify({ type: 'report', format: args.type, data: args.data }) + "\n"));
+                toolResult = { status: "Reporte generado y enviado al usuario exitosamente." };
               }
 
-              // Send tool result back to Gemini
               const toolResponse = await chat.sendMessage([{
-                functionResponse: {
-                  name: call.name,
-                  response: toolResult || { error: 'No se pudo obtener el resultado' }
-                }
+                functionResponse: { name: call.name, response: toolResult || { error: 'Sin respuesta' } }
               }]);
 
               const toolText = toolResponse.response.text();
@@ -129,9 +118,7 @@ export async function POST(req: Request) {
       },
     });
 
-    return new Response(stream, {
-      headers: { 'Content-Type': 'application/x-ndjson' },
-    });
+    return new Response(stream, { headers: { 'Content-Type': 'application/x-ndjson' } });
 
   } catch (error: any) {
     console.error('Chat API Error:', error);
