@@ -7,7 +7,7 @@ import VisionPanel from "@/components/vision/VisionPanel";
 import { generatePDF, generateExcel } from "@/lib/reports";
 import { Message, Project } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Send, Paperclip, Camera, Loader2, FileSpreadsheet, FileText } from "lucide-react";
+import { Mic, MicOff, Send, Paperclip, Camera, Loader2, FileSpreadsheet, FileText, AlertTriangle } from "lucide-react";
 import Image from "next/image";
 
 export default function Home() {
@@ -17,6 +17,7 @@ export default function Home() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [isVisionOpen, setIsVisionOpen] = useState(false);
+  const [appError, setAppError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: "Hola, soy ATENEA. Estoy lista para asistirte en tus proyectos de forma multimodal. ¿En qué puedo ayudarte hoy?" }
   ]);
@@ -43,25 +44,28 @@ export default function Home() {
     const fetchProjects = async () => {
       try {
         const res = await fetch('/api/projects');
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         if (data && data.length > 0) {
           setProjects(data);
           setCurrentProjectId(data[0].id);
           fetchHistory(data[0].id);
         } else {
-          // Create a default project if none exist
           handleNewProject("Proyecto Principal");
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error loading projects:", err);
+        setAppError(`Error al cargar proyectos: ${err.message}. Verifica las claves de Supabase.`);
       }
     };
     fetchProjects();
   }, []);
 
   const fetchHistory = async (projectId: string) => {
+    if (!projectId) return;
     try {
       const res = await fetch(`/api/projects/${projectId}/history`);
+      if (!res.ok) throw new Error("Error cargando historial");
       const data = await res.json();
       if (data && data.length > 0) {
         setMessages(data);
@@ -80,12 +84,20 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
+
       const newProject = await res.json();
-      setProjects(prev => [newProject, ...prev]);
-      setCurrentProjectId(newProject.id);
-      setMessages([{ role: "assistant", content: `Nuevo proyecto "${name}" creado. Estoy lista.` }]);
-    } catch (err) {
+
+      if (newProject && newProject.id) {
+        setProjects(prev => [newProject, ...prev]);
+        setCurrentProjectId(newProject.id);
+        setMessages([{ role: "assistant", content: `Nuevo proyecto "${name}" creado. Estoy lista.` }]);
+        setAppError(null);
+      } else {
+        throw new Error(newProject.error || "No se pudo crear el proyecto en la base de datos.");
+      }
+    } catch (err: any) {
       console.error("Error creating project:", err);
+      setAppError(`No se pudo inicializar el proyecto: ${err.message}. Asegúrate de haber ejecutado el SQL en Supabase.`);
     }
   };
 
@@ -144,6 +156,10 @@ export default function Home() {
   const handleSendMessage = async (content?: string, image?: string, fileData?: string) => {
     const text = content || inputValue;
     if (!text && !image && !fileData) return;
+    if (!currentProjectId) {
+      setAppError("Selecciona o crea un proyecto antes de enviar mensajes.");
+      return;
+    }
 
     stopAudio();
 
@@ -160,6 +176,11 @@ export default function Home() {
         body: JSON.stringify({ messages: [...messages, newMessage], projectId: currentProjectId, image, fileData }),
       });
 
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Error en el servidor de chat");
+      }
+
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       const assistantMessage: Message = { role: "assistant", content: "" };
@@ -175,22 +196,25 @@ export default function Home() {
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split('\n').filter(Boolean);
           for (const line of lines) {
-             const data = JSON.parse(line);
-             if (data.type === 'status') {
-                setIsThinking(true);
-             }
-             if (data.type === 'text') {
-               setIsThinking(false);
-               assistantMessage.content += data.text;
-               accumulatedText += data.text;
-               setMessages(prev => [...prev.slice(0, -1), { ...assistantMessage }]);
+             try {
+                const data = JSON.parse(line);
+                if (data.type === 'status') {
+                    setIsThinking(true);
+                }
+                if (data.type === 'text') {
+                  setIsThinking(false);
+                  assistantMessage.content += data.text;
+                  accumulatedText += data.text;
+                  setMessages(prev => [...prev.slice(0, -1), { ...assistantMessage }]);
 
-               // Speak in chunks of full sentences for lower latency
-               if (accumulatedText.length - lastSpokenIndex > 60 && /[.!?]\s$/.test(accumulatedText)) {
-                  const chunkToSpeak = accumulatedText.substring(lastSpokenIndex);
-                  speakText(chunkToSpeak);
-                  lastSpokenIndex = accumulatedText.length;
-               }
+                  if (accumulatedText.length - lastSpokenIndex > 60 && /[.!?]\s$/.test(accumulatedText)) {
+                      const chunkToSpeak = accumulatedText.substring(lastSpokenIndex);
+                      speakText(chunkToSpeak);
+                      lastSpokenIndex = accumulatedText.length;
+                  }
+                }
+             } catch (e) {
+                console.warn("Error parseando chunk:", e);
              }
           }
         }
@@ -199,9 +223,9 @@ export default function Home() {
       if (lastSpokenIndex < accumulatedText.length) {
          speakText(accumulatedText.substring(lastSpokenIndex));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat Error:", error);
-      setMessages(prev => [...prev, { role: "assistant", content: "Lo siento, hubo un error técnico. Revisa tu conexión o las claves de API." }]);
+      setMessages(prev => [...prev, { role: "assistant", content: `Error: ${error.message}. Verifica tus claves de API.` }]);
     } finally {
       setIsLoading(false);
       setIsThinking(false);
@@ -210,7 +234,10 @@ export default function Home() {
 
   const startVoiceCapture = () => {
      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-     if (!SpeechRecognition) return;
+     if (!SpeechRecognition) {
+        alert("Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.");
+        return;
+     }
 
      if (isListening) {
         recognitionRef.current?.stop();
@@ -225,7 +252,7 @@ export default function Home() {
 
      recognition.onstart = () => {
         setIsListening(true);
-        stopAudio(); // Interruption logic
+        stopAudio();
      };
 
      recognition.onresult = (event: any) => {
@@ -238,13 +265,6 @@ export default function Home() {
 
      recognition.start();
   };
-
-  // Simple voice detection to interrupt
-  useEffect(() => {
-    if (isSpeaking && !isListening) {
-       // Optional: auto-activate mic or just listen for volume
-    }
-  }, [isSpeaking, isListening]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -281,11 +301,24 @@ export default function Home() {
       />
 
       <div className="flex-1 flex flex-col relative overflow-hidden">
+        {appError && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4">
+             <div className="bg-red-500/20 border border-red-500/50 backdrop-blur-xl p-4 rounded-2xl flex items-start space-x-3 text-red-200">
+                <AlertTriangle className="shrink-0" size={20} />
+                <div className="text-xs">
+                   <p className="font-bold uppercase tracking-wider mb-1">Error de Sistema</p>
+                   <p className="opacity-90 leading-relaxed">{appError}</p>
+                   <button onClick={() => setAppError(null)} className="mt-2 text-[10px] underline font-bold uppercase">Cerrar</button>
+                </div>
+             </div>
+          </div>
+        )}
+
         <header className="h-16 px-8 flex items-center justify-between border-b border-indigo-atenea-dark/20 bg-[#0b0c1e]/50 backdrop-blur-xl z-20">
           <div className="flex items-center space-x-2">
             <div className={`w-2 h-2 rounded-full ${isThinking ? 'bg-purple-400 animate-pulse' : 'bg-green-400'}`} />
             <span className="text-xs font-medium text-indigo-300 uppercase tracking-widest truncate max-w-[200px]">
-              {projects.find(p => p.id === currentProjectId)?.name || 'Cargando...'}
+              {projects.find(p => p.id === currentProjectId)?.name || 'Iniciando Atenea...'}
             </span>
           </div>
           <div className="flex items-center space-x-4">

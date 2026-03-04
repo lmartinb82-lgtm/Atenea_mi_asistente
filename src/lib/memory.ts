@@ -5,9 +5,6 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
 
 export const supabaseServer = createClient(supabaseUrl, supabaseKey);
 
-// Guest ID for public access
-export const PUBLIC_USER_ID = '00000000-0000-0000-0000-000000000000';
-
 export async function getProjects() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
   const { data, error } = await supabaseServer
@@ -16,23 +13,26 @@ export async function getProjects() {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error getting projects:', error);
+    console.error('Supabase Error (getProjects):', error);
     return [];
   }
   return data || [];
 }
 
 export async function createProject(name: string) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return null;
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return { error: 'Supabase URL not configured' };
+  }
+
   const { data, error } = await supabaseServer
     .from('projects')
-    .insert([{ name, user_id: null }]) // Using null for public shared projects
+    .insert([{ name, user_id: null }])
     .select()
     .single();
 
   if (error) {
-    console.error('Error creating project:', error);
-    return null;
+    console.error('Supabase Error (createProject):', error);
+    return { error: error.message };
   }
   return data;
 }
@@ -44,7 +44,7 @@ export async function saveMessage(projectId: string, role: string, content: stri
     .insert([{ project_id: projectId, role, content, type }])
     .select();
 
-  if (error) console.error('Error saving message:', error);
+  if (error) console.error('Supabase Error (saveMessage):', error);
   return data;
 }
 
@@ -56,6 +56,6 @@ export async function getProjectHistory(projectId: string) {
     .eq('project_id', projectId)
     .order('created_at', { ascending: true });
 
-  if (error) console.error('Error getting history:', error);
+  if (error) console.error('Supabase Error (getProjectHistory):', error);
   return data || [];
 }

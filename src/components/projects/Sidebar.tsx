@@ -10,7 +10,7 @@ interface SidebarProps {
   onNewProject: () => void;
 }
 
-export default function Sidebar({ projects, currentProjectId, onProjectSelect, onNewProject }: SidebarProps) {
+export default function Sidebar({ projects = [], currentProjectId, onProjectSelect, onNewProject }: SidebarProps) {
   return (
     <div className="w-64 h-full bg-[#0b0c1e] border-r border-indigo-atenea-dark/30 flex flex-col hidden md:flex">
       {/* Brand Header */}
@@ -37,21 +37,25 @@ export default function Sidebar({ projects, currentProjectId, onProjectSelect, o
             </button>
           </div>
           <div className="space-y-1">
-            {projects.map((project) => (
-              <motion.button
-                key={project.id}
-                onClick={() => onProjectSelect(project.id)}
-                whileHover={{ x: 4 }}
-                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center space-x-3 ${
-                  currentProjectId === project.id
-                    ? "bg-indigo-500/10 text-indigo-50 border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.05)]"
-                    : "text-indigo-300/50 hover:bg-indigo-500/5 hover:text-indigo-200"
-                }`}
-              >
-                <FolderClosed size={14} className={currentProjectId === project.id ? "text-indigo-400" : "text-indigo-500/30"} />
-                <span className="truncate font-medium">{project.name}</span>
-              </motion.button>
-            ))}
+            {projects && projects.length > 0 ? (
+              projects.map((project) => (
+                <motion.button
+                  key={project.id}
+                  onClick={() => onProjectSelect(project.id)}
+                  whileHover={{ x: 4 }}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center space-x-3 ${
+                    currentProjectId === project.id
+                      ? "bg-indigo-500/10 text-indigo-50 border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.05)]"
+                      : "text-indigo-300/50 hover:bg-indigo-500/5 hover:text-indigo-200"
+                  }`}
+                >
+                  <FolderClosed size={14} className={currentProjectId === project.id ? "text-indigo-400" : "text-indigo-500/30"} />
+                  <span className="truncate font-medium">{project.name}</span>
+                </motion.button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-[10px] text-indigo-300/30 italic">Sin proyectos activos</div>
+            )}
           </div>
         </div>
 
